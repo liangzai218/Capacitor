@@ -1,0 +1,8 @@
+{
+  "appId": "com.liangzai.lifemanager",
+  "appName": "Life Manager",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
