@@ -11,55 +11,45 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. 拉取代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 安装 Node.js (Capacitor 需要)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # 3. 安装 Java 17 (安卓编译需要)
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 4. 准备网页目录 www
       - name: Prepare Web Directory
         run: |
           mkdir -p www
-          # 把你仓库里的网页文件都拷过去，不管你有多少 JS/CSS/PNG 都拷进去
-          cp *.html *.js *.css *.png www/ 2>/dev/null || true
-          # 把 assets 也拷进去（如果有本地图片）
-          cp -r assets/* www/ 2>/dev/null || true
+          # 把根目录所有的网页资源全部拷入 www
+          cp *.html *.js *.json *.png www/ 2>/dev/null || true
+          # 为了防止把配置文件也拷进去，我们手动删一下
+          rm -f www/package.json www/capacitor.config.json www/manifest.json
 
-      # 5. 安装 Capacitor 依赖
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
 
-      # 6. 添加安卓平台
       - name: Add Android Platform
         run: npx cap add android
 
-      # 7. 生成你的专属 App 图标和启动图 (根据 assets/icon.png)
-      - name: Generate App Icons and Splash
+      - name: Generate App Icons
         run: npx @capacitor/assets generate --android
 
-      # 8. 编译打包 APK
       - name: Build APK
         run: |
           cd android
-          # 给 gradlew 权限并执行打包
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      # 9. 上传打包好的 APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Life-Manager-Shell-APK
+          name: Life-Manager-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
