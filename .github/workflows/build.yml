@@ -28,9 +28,7 @@ jobs:
       - name: Prepare Web Directory
         run: |
           mkdir -p www
-          # 把根目录所有的网页资源全部拷入 www
           cp *.html *.js *.json *.png www/ 2>/dev/null || true
-          # 为了防止把配置文件也拷进去，我们手动删一下
           rm -f www/package.json www/capacitor.config.json www/manifest.json
 
       - name: Install Dependencies
@@ -38,6 +36,11 @@ jobs:
 
       - name: Add Android Platform
         run: npx cap add android
+
+      # 🌟 核心修复：强制修改安卓原生样式，实现状态栏透明（沉浸式）
+      - name: Make Status Bar Transparent
+        run: |
+          sed -i 's|<item name="android:background">@null</item>|<item name="android:background">@null</item>\n        <item name="android:statusBarColor">@android:color/transparent</item>\n        <item name="android:windowLightStatusBar">true</item>\n        <item name="android:navigationBarColor">@android:color/transparent</item>|' android/app/src/main/res/values/styles.xml
 
       - name: Generate App Icons
         run: npx @capacitor/assets generate --android
