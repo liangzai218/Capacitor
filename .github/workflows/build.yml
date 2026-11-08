@@ -28,7 +28,11 @@ jobs:
       - name: Prepare Web Directory
         run: |
           mkdir -p www
+          # 复制根目录下的所有静态文件
           cp *.html *.js *.json *.png www/ 2>/dev/null || true
+          # 🌟 核心修复：递归复制 assets 文件夹（包含 bg 图片）到 www 目录
+          cp -r assets www/ 2>/dev/null || true
+          # 清理不需要的配置文件，避免 Capacitor 冲突
           rm -f www/package.json www/capacitor.config.json www/manifest.json
 
       - name: Install Dependencies
