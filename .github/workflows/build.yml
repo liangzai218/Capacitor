@@ -32,17 +32,10 @@ jobs:
           cp -r assets www/ 2>/dev/null || true
           rm -f www/package.json www/capacitor.config.json www/manifest.json
 
-      # 🌟 核心修复：强制使用包含稳定预编译包的 sharp 版本
-      - name: Override sharp version
-        run: |
-          npm pkg set overrides.sharp="0.34.1"
-          npm pkg set overrides.@img/sharp-libvips-linux-x64="1.0.4"
-
       - name: Install Dependencies
         run: |
-          npm install --legacy-peer-deps --fetch-timeout=60000 || \
-          npm install --legacy-peer-deps --fetch-timeout=60000 || \
           npm install --legacy-peer-deps --fetch-timeout=60000
+          npm install --os=linux --cpu=x64 sharp --include=optional --legacy-peer-deps
 
       - name: Add Android Platform
         run: npx cap add android
