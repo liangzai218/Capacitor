@@ -25,19 +25,18 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Configure npm mirrors
-        run: |
-          npm config set registry https://registry.npmmirror.com
-          echo "SHARP_DIST_BASE_URL=https://npmmirror.com/mirrors/sharp-libvips" >> $GITHUB_ENV
-          echo "SHARP_BINARY_HOST=https://npmmirror.com/mirrors/sharp" >> $GITHUB_ENV
-          echo "SHARP_LIBVIPS_BINARY_HOST=https://npmmirror.com/mirrors/sharp-libvips" >> $GITHUB_ENV
-
       - name: Prepare Web Directory
         run: |
           mkdir -p www
           cp *.html *.js *.json *.png www/ 2>/dev/null || true
           cp -r assets www/ 2>/dev/null || true
           rm -f www/package.json www/capacitor.config.json www/manifest.json
+
+      # 🌟 核心修复：强制使用包含稳定预编译包的 sharp 版本
+      - name: Override sharp version
+        run: |
+          npm pkg set overrides.sharp="0.34.1"
+          npm pkg set overrides.@img/sharp-libvips-linux-x64="1.0.4"
 
       - name: Install Dependencies
         run: |
