@@ -41,14 +41,15 @@ jobs:
       - name: Add Android Platform
         run: npx cap add android
 
-      # 🌟 终极修复：直接重写 Android 原生入口，强制全屏并设置深色图标
-      - name: Enforce True Immersive Mode
+      # 🌟 终极修复：重写原生入口，强制全屏，并拦截返回键交给 WebView 处理
+      - name: Enforce True Immersive Mode & Back Button
         run: |
           cat > android/app/src/main/java/com/liangzai/lifemanager/MainActivity.java << 'EOF'
           package com.liangzai.lifemanager;
 
           import android.os.Bundle;
           import android.graphics.Color;
+          import android.webkit.WebView;
           import androidx.core.view.WindowCompat;
           import androidx.core.view.WindowInsetsControllerCompat;
           import com.getcapacitor.BridgeActivity;
@@ -65,12 +66,23 @@ jobs:
                   getWindow().setStatusBarColor(Color.TRANSPARENT);
                   getWindow().setNavigationBarColor(Color.TRANSPARENT);
                   
-                  // 3. 强制状态栏和导航栏图标为深色（因为你的背景是浅色）
+                  // 3. 强制状态栏和导航栏图标为深色
                   WindowInsetsControllerCompat windowInsetsController = 
                       WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
                   if (windowInsetsController != null) {
                       windowInsetsController.setAppearanceLightStatusBars(true);
                       windowInsetsController.setAppearanceLightNavigationBars(true);
+                  }
+              }
+
+              // 🌟 核心修复：拦截侧滑/物理返回键，优先交给 WebView 的 popstate 处理
+              @Override
+              public void onBackPressed() {
+                  WebView webView = getBridge().getWebView();
+                  if (webView != null && webView.canGoBack()) {
+                      webView.goBack();
+                  } else {
+                      super.onBackPressed();
                   }
               }
           }
