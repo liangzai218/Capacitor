@@ -220,14 +220,15 @@ body.keyboard-open .fab-btn {
 /* 极简纯白悬浮卡片 */
 .center-modal-content { 
     background: #FFFFFF; 
-    /* 关键：弥散投影。用大范围低透明度的阴影营造悬浮感，而不是生硬的边框 */
     box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.18), 0 4px 16px -4px rgba(0, 0, 0, 0.08);
     width: 78%; max-width: 280px; 
-    border-radius: 24px; /* 加大圆角，更像现代 App */
-    padding: 20px 16px 16px; /* 顶部内边距稍微加大，留白更美 */
+    border-radius: 24px; 
+    padding: 20px 16px 16px; 
     transform: scale(0.9) translateY(20px); 
-    /* 使用苹果同款阻尼弹簧动画 */
     transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* 🌟 新增这两行 */
+    max-height: calc(100% - 40px); 
+    overflow-y: auto;
 }
 .center-modal-overlay.active .center-modal-content { 
     transform: scale(1) translateY(0); 
@@ -3016,7 +3017,8 @@ function renderDiaryDetailView() {
     
     let imgsHtml = '';
 if (note.imageIds && note.imageIds.length > 0) {
-    imgsHtml = `<div class="space-y-4 mt-10">${note.imageIds.map(id => `<img data-asset-id="${id}" class="w-full rounded-xl object-cover bg-gray-50 cursor-pointer shadow-sm" onclick="showImagePreview(this.src)">`).join('')}</div>`;
+    // 🌟 修复 1：给图片父容器加上 flex-shrink-0，防止高度被强制挤压
+    imgsHtml = `<div class="space-y-4 mt-10 w-full flex-shrink-0">${note.imageIds.map(id => `<img data-asset-id="${id}" class="w-full h-auto rounded-xl object-cover bg-gray-50 cursor-pointer shadow-sm" onclick="showImagePreview(this.src)">`).join('')}</div>`;
 }
 
     const themeObj = DIARY_THEMES.find(t => t.id === (note.bgThemeId || 'default')) || DIARY_THEMES[0];
@@ -3047,10 +3049,8 @@ if (note.imageIds && note.imageIds.length > 0) {
     <!-- 滚动内容区 -->
     <main id="diary-detail-main" onscroll="handleDiaryDetailScroll(this)" class="relative z-10 flex-1 flex flex-col overflow-y-auto px-6" style="padding-top: calc(env(safe-area-inset-top, 0px) + 40px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 80px); overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;">
         
-        <!-- 🌟 无界沉浸式：不再有卡片外壳，文字直接悬浮在背景上 -->
-        
-        <!-- 日期引言 -->
-        <div class="flex justify-between items-end mb-8 pb-4 border-b ${isAutoWhite ? 'border-white/20' : 'border-gray-300/50'}">
+        <!-- 日期引言（加 flex-shrink-0 防止被压缩） -->
+        <div class="flex justify-between items-end mb-8 pb-4 border-b ${isAutoWhite ? 'border-white/20' : 'border-gray-300/50'} flex-shrink-0">
             <div class="flex items-baseline gap-2">
                 <span class="text-[52px] font-black leading-[0.8] tracking-tighter ${isAutoWhite ? 'text-white' : 'text-gray-800'}" style="text-shadow: 0 2px 10px rgba(0,0,0,0.15);">${dayStr}</span>
                 <span class="text-[12px] font-bold tracking-widest ${isAutoWhite ? 'text-white/80' : 'text-gray-600'}">${d.getMonth()+1}月</span>
@@ -3061,18 +3061,17 @@ if (note.imageIds && note.imageIds.length > 0) {
             </div>
         </div>
 
-                <!-- 正文（加网格线，flex-1 强行撑满剩余空间保证网格延伸） -->
-<div class="flex-1 diary-lined-paper ${isAutoWhite ? 'dark-bg' : 'light-bg'}" style="min-height: 40vh;">
-    <!-- 顺带把行高改成 leading-[2] 匹配 30px 横线 -->
-    <p class="text-[15px] leading-[2] whitespace-pre-wrap" style="color: ${dTextColor}; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; -webkit-font-smoothing: antialiased;">${escapeHtml(note.content || '')}</p>
-</div>
+        <!-- 🌟 修复 2：正文移除了 flex-1，并加上 flex-shrink-0，让高度按文字自然撑开，绝不压缩 -->
+<div class="diary-lined-paper ${isAutoWhite ? 'dark-bg' : 'light-bg'} flex-shrink-0" style="min-height: 150px;">
+            <!-- 顺带把行高改成 leading-[2] 匹配 30px 横线 -->
+            <p class="text-[15px] leading-[2] whitespace-pre-wrap" style="color: ${dTextColor}; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; -webkit-font-smoothing: antialiased;">${escapeHtml(note.content || '')}</p>
+        </div>
 
         <!-- 图片展示区 -->
-${imgsHtml}
+        ${imgsHtml}
 
-        <!-- 底部元数据（横向排列 + mt-auto沉底 + 压缩底部留白 + 居中） -->
-<div class="mt-auto pt-4 pb-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] opacity-80 ${isAutoWhite ? 'text-white/80' : 'text-gray-500'}">
-
+        <!-- 底部元数据（加 flex-shrink-0 防止被压缩，保留 mt-auto 保证短内容时沉底） -->
+        <div class="mt-auto pt-4 pb-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] opacity-80 flex-shrink-0 ${isAutoWhite ? 'text-white/80' : 'text-gray-500'}">
             ${note.weather ? `<div class="flex items-center gap-1.5"><i data-lucide="${note.weatherIcon || 'sun'}" class="w-3.5 h-3.5"></i>${escapeHtml(note.weather)}</div>` : ''}
             ${note.location ? `<div class="flex items-center gap-1.5"><i data-lucide="map-pin" class="w-3.5 h-3.5"></i>${escapeHtml(note.location)}</div>` : ''}
             ${note.device ? `<div class="flex items-center gap-1.5"><i data-lucide="smartphone" class="w-3.5 h-3.5"></i>${escapeHtml(note.device)}</div>` : ''}
@@ -3424,49 +3423,45 @@ function cancelDiaryEdit() {
 // 核心：外层 root 锁死不动（防顶飞），用 absolute 工具栏（防露白），
 // 暴力锁死 main 高度并减去 40px 呼吸区（防光标被吃）
 function _applyDiaryLayout() {
+    const root = document.getElementById('diary-edit-root');
     const toolbar = document.getElementById('diary-toolbar');
     const main = document.getElementById('diary-scroll-area');
-    if (!main || !toolbar) return;
+    if (!main || !toolbar || !root) return;
 
     if (window.visualViewport) {
         const currentVH = window.visualViewport.height;
         const isKeyboardOpen = currentVH < window.innerHeight - 100;
-        const kbHeight = window.innerHeight - currentVH;
-
-        const navEl = document.getElementById('diary-edit-nav');
-        const topBarHeight = navEl ? navEl.offsetHeight : 50; 
-        const BREATH = 40; 
 
         if (isKeyboardOpen) {
-            // 🌟 键盘弹起时，强制中断隐藏状态
             if (_diaryEditFadeTimer) clearTimeout(_diaryEditFadeTimer);
             const nav = document.getElementById('diary-edit-nav');
             const tb = document.getElementById('diary-toolbar');
             if (nav) { nav.style.opacity = '1'; nav.style.transform = 'translateY(0) scale(1)'; nav.style.pointerEvents = 'auto'; }
             if (tb) { tb.style.opacity = '1'; tb.style.transform = 'translateX(-50%) translateY(0) scale(1)'; tb.style.pointerEvents = 'auto'; }
 
-            toolbar.style.bottom = `${kbHeight + 12}px`;
+            // 🌟 核心修复：直接限定根容器高度，利用原生 flex 布局自动推挤内部元素，彻底避免因计算 kbHeight 误差导致悬空或留白
+            root.style.height = currentVH + 'px';
+            toolbar.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 10px)';
             
-            const availHeight = currentVH - topBarHeight - 38 - 12 - BREATH;
-            
-            main.style.height = `${Math.max(100, availHeight)}px`;
-            main.style.flex = '0 0 auto';
-            main.style.maxHeight = 'none'; 
-            main.style.paddingBottom = '20px'; // 键盘弹起时留一点呼吸即可
+            main.style.height = '';
+            main.style.flex = '';
+            main.style.maxHeight = '';
+            main.style.paddingBottom = '20px';
         } else {
-            // 🌟 键盘收起时，强制唤醒导航栏和工具栏
             if (_diaryEditFadeTimer) { clearTimeout(_diaryEditFadeTimer); _diaryEditFadeTimer = null; }
             const nav = document.getElementById('diary-edit-nav');
             const tb = document.getElementById('diary-toolbar');
             if (nav) { nav.style.opacity = '1'; nav.style.transform = 'translateY(0) scale(1)'; nav.style.pointerEvents = 'auto'; }
             if (tb) { tb.style.opacity = '1'; tb.style.transform = 'translateX(-50%) translateY(0) scale(1)'; tb.style.pointerEvents = 'auto'; }
 
+            // 🌟 键盘收起，恢复原生全屏高度
+            root.style.height = '100dvh';
             toolbar.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 10px)';
             
             main.style.height = '';
             main.style.flex = '';
             main.style.maxHeight = '';
-            main.style.paddingBottom = '80px'; // 留出工具栏的高度和底部安全区，防止内容被挡
+            main.style.paddingBottom = '80px';
         }
     }
 }
@@ -9902,6 +9897,9 @@ let _initialVH = window.visualViewport ? window.visualViewport.height : window.i
 function showKeyboardUI() {
     document.body.classList.add('keyboard-open');
     
+    // 🌟 核心修复：如果当前有居中弹窗激活，不执行全局 scrollIntoView，防止整个弹窗被顶飞
+    if (document.querySelector('.center-modal-overlay.active')) return;
+
     if (currentTab === 'diary_edit' || currentTab === 'diary_detail') return;
 
     const t = document.activeElement;
@@ -9921,11 +9919,27 @@ if (window.visualViewport) {
         const currentVH = window.visualViewport.height;
         const keyboardHeight = _initialVH - currentVH;
 
+        // 获取当前激活的居中弹窗
+        const activeCenterModal = document.querySelector('.center-modal-overlay.active');
+
         if (keyboardHeight > 100) {
             showKeyboardUI();
+            
+            // 🌟 核心修复：键盘弹起时，让弹窗遮罩层高度缩到键盘上方，并在该区域内重新居中
+            if (activeCenterModal) {
+                activeCenterModal.style.height = `${currentVH}px`;
+                activeCenterModal.style.top = `${window.visualViewport.offsetTop}px`;
+                activeCenterModal.style.paddingBottom = '0';
+            }
         } else {
             hideKeyboardUI();
             _initialVH = currentVH;
+            
+            // 🌟 键盘收起时，恢复弹窗的默认全屏样式
+            if (activeCenterModal) {
+                activeCenterModal.style.height = '';
+                activeCenterModal.style.top = '';
+            }
         }
         
         // 每次视口变化，重绘日记页布局
