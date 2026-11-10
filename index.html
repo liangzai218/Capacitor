@@ -10090,14 +10090,20 @@ async function showUpdatePrompt(worker) {
             };
             
             document.getElementById('update-now-btn').onclick = () => {
-                cleanup();
-                if (_waitingWorker) {
-                    _waitingWorker.postMessage({ action: 'skipWaiting' });
-                } else {
-                    window.location.reload();
-                }
-                resolve('update');
-            };
+    cleanup();
+    if (_waitingWorker) {
+        _waitingWorker.postMessage({ action: 'skipWaiting' });
+    }
+    // 🌟 强制打断浏览器的排队挂起，直接发起新的网络导航
+    setTimeout(() => {
+        if (window._isReloading) return;
+        window._isReloading = true;
+        const url = new URL(window.location.href);
+        url.searchParams.set('_v', Date.now().toString());
+        window.location.replace(url.toString());
+    }, 150);
+    resolve('update');
+};
             
             document.getElementById('update-later-btn').onclick = () => {
                 cleanup();
@@ -10163,13 +10169,14 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
             }
         }).catch(err => console.log('PWA 注册失败!', err));
 
-        // 监听控制权接管，平滑刷新
-        let refreshing;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (refreshing) return;
-            refreshing = true;
-            window.location.reload();
-        });
+        // 监听控制权接管，平滑刷新（同样使用强制导航）
+navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (window._isReloading) return;
+    window._isReloading = true;
+    const url = new URL(window.location.href);
+    url.searchParams.set('_v', Date.now().toString());
+    window.location.replace(url.toString());
+});
     });
 }
     </script>
