@@ -1094,9 +1094,10 @@ function openModal(html) {
         let goalsExpandedId = null; // 记录当前展开的心愿ID
         let billViewMode = 'daily';
         let currentMonth = new Date();
-        let noteType = 'text';
-        let _currentDiaryId = null; // 🌟 新增：记录当前日记ID
-        let showAddInput = false;
+       let noteType = 'text';
+let _currentDiaryId = null; // 🌟 新增：记录当前日记ID
+let _userGeo = { lat: null, lon: null, city: '' }; // 🌟 新增：缓存定位，用于查历史天气
+let showAddInput = false;
 let taskStatsMonth = new Date();
 let menstrualViewMonth = new Date();
 let _menstrualRenderCache = null;   // 新增：经期页渲染缓存，让预测函数在一次渲染里只算一次
@@ -2304,10 +2305,11 @@ function renderDiaryList(notes) {
         const dayNotes = groupedByDate[dateStr];
         
         const d = parseDate(dateStr);
-        const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
-        const displayDate = `${d.getFullYear()} / ${String(d.getMonth()+1).padStart(2,'0')} / ${String(d.getDate()).padStart(2,'0')}`;
-        
-        const weatherIcon = getWeatherIcon(dayNotes[0].weather);
+const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+const displayDate = `${d.getFullYear()} / ${String(d.getMonth()+1).padStart(2,'0')} / ${String(d.getDate()).padStart(2,'0')}`;
+
+// 🌟 优先读取数据库里存好的准确图标；如果是旧日记没存图标，再用老方法兜底
+const weatherIcon = dayNotes[0].weatherIcon || getWeatherIcon(dayNotes[0].weather);
 
         // 🌟 核心布局：外层 flex，左侧固定宽度画时间轴，右侧自适应内容
         let dayHtml = `
@@ -2412,26 +2414,56 @@ function addNote() {
 
 // ==================== 日记专属独立页面 ====================
 
-// 使用免费免权限的 IP 定位服务 (ipapi.co)，再联合 Open-Meteo 获取天气
-async function fetchWeatherInfo() {
+// 升级版天气引擎：支持传入日期，自动区分实时天气与历史天气
+async function fetchWeatherInfo(targetDate) {
     try {
-        // 1. 获取 IP 和 经纬度、城市
-        const ipRes = await fetchWithTimeout('https://ipapi.co/json/', { timeout: 5000 });
-        if (!ipRes.ok) throw new Error('IP 获取失败');
-        const ipData = await ipRes.json();
-        
-        if (!ipData.latitude || !ipData.longitude) throw new Error('经纬度获取失败');
-        
-        const lat = ipData.latitude;
-        const lon = ipData.longitude;
-        const city = ipData.city || ipData.region || '未知城市';
+        // 1. 如果没缓存过经纬度，先请求 IP 获取
+        if (!_userGeo.lat || !_userGeo.lon) {
+            const ipRes = await fetchWithTimeout('https://api.ip.sb/geoip', { timeout: 5000 });
+            if (!ipRes.ok) throw new Error('IP获取失败');
+            const ipData = await ipRes.json();
+            
+            const rawCity = ipData.city || 'Unknown';
+            let cityName = rawCity;
+            let lat = ipData.latitude;
+            let lon = ipData.longitude;
 
-        // 2. 使用经纬度获取天气 (Open-Meteo)
-        const wRes = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`, { timeout: 5000 });
-        const wData = await wRes.json();
-        const temp = wData.current_weather?.temperature;
-        const code = wData.current_weather?.weathercode;
-        
+            const geoRes = await fetchWithTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(rawCity)}&count=1&language=zh&format=json`, { timeout: 5000 });
+            if (geoRes.ok) {
+                const geoData = await geoRes.json();
+                if (geoData.results && geoData.results.length > 0) {
+                    cityName = geoData.results[0].name;
+                    lat = geoData.results[0].latitude;
+                    lon = geoData.results[0].longitude;
+                }
+            }
+            _userGeo = { lat, lon, city: cityName }; // 写入缓存
+        }
+
+        const todayStr = formatDateLocal(new Date());
+        let temp = null;
+        let code = 0;
+
+        // 2. 根据传入的日期决定查实时还是历史
+        if (targetDate === todayStr) {
+            // 查今天实时
+            const wRes = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${_userGeo.lat}&longitude=${_userGeo.lon}&current_weather=true`, { timeout: 5000 });
+            const wData = await wRes.json();
+            temp = wData.current_weather?.temperature;
+            code = wData.current_weather?.weathercode;
+        } else {
+            // 查历史天气
+            const wRes = await fetchWithTimeout(`https://archive-api.open-meteo.com/v1/archive?latitude=${_userGeo.lat}&longitude=${_userGeo.lon}&start_date=${targetDate}&end_date=${targetDate}&daily=weathercode,temperature_2m_max&timezone=auto`, { timeout: 5000 });
+            const wData = await wRes.json();
+            if (wData.daily && wData.daily.weathercode && wData.daily.weathercode.length > 0) {
+                temp = wData.daily.temperature_2m_max[0];
+                code = wData.daily.weathercode[0];
+            } else {
+                return { city: _userGeo.city, weatherStr: '无记录', weatherIcon: 'sun' };
+            }
+        }
+
+        // 3. 天气代码翻译
         let text = '未知';
         let icon = 'sun';
         if (code === 0) { text = '晴'; icon = 'sun'; }
@@ -2442,13 +2474,12 @@ async function fetchWeatherInfo() {
         else if ([95,96,99].includes(code)) { text = '雷雨'; icon = 'cloud-lightning'; }
         
         return { 
-            city: city,
-            weatherStr: `${text} ${temp ? Math.round(temp) + '°C' : ''}`.trim(), 
+            city: _userGeo.city,
+            weatherStr: `${text} ${temp !== null ? Math.round(temp) + '°C' : ''}`.trim(), 
             weatherIcon: icon 
         };
     } catch (e) {
-        console.warn('IP定位或天气获取超时/失败:', e);
-        // 失败时返回静默的占位数据，不报错打扰用户
+        console.warn('天气获取超时/失败:', e);
         return { city: '未能获取', weatherStr: '天气未知', weatherIcon: 'sun' };
     }
 }
@@ -2457,7 +2488,23 @@ function getDeviceName() {
     const ua = navigator.userAgent;
     if (ua.includes('iPhone')) return 'iPhone';
     if (ua.includes('iPad')) return 'iPad';
-    if (ua.includes('Android')) return 'Android';
+    
+    if (ua.includes('Android')) {
+        // 深度匹配 UA 中的型号（兼容更多格式）
+        // 常见的格式：Android 10; SM-G9730 Build/QP1A.190711.020
+        // 或者：Android 10; wv (这里 wv 代表 WebView，没有型号)
+        const match = ua.match(/Android\s+([\d.]+);\s*([^;)]+?)(?:\s+Build|\))/i);
+        if (match && match[2]) {
+            let model = match[2].trim();
+            // 过滤掉那些没有意义的后缀，且排除 wv 这种 WebView 标识
+            if (!model.toLowerCase().includes('wv') && model.toLowerCase() !== 'k' && model.length > 1) {
+                // 如果型号里带有厂商代码（如 "MI 8"），直接返回
+                return model;
+            }
+        }
+        // 如果 UA 里被 App 强行阉割了（比如微信/QQ内置浏览器），只能显示 Android
+        return 'Android';
+    }
     return 'Web端';
 }
 
@@ -2492,7 +2539,7 @@ function renderDiaryEditView() {
 
     setTimeout(async () => {
         if (!note.weather && !note.location) {
-            const info = await fetchWeatherInfo();
+            const info = await fetchWeatherInfo(note.date);
             const locEl = document.getElementById('diary-form-loc');
             const weaEl = document.getElementById('diary-form-wea');
             if (locEl) { locEl.innerText = info.city; locEl.dataset.loc = info.city; }
@@ -2637,7 +2684,7 @@ function showThemePicker() {
     ${DIARY_THEMES.map(t => {
         let bgStyle = t.type === 'color' ? `background-color: ${t.bg};` : (t.type === 'gradient' ? `background-image: ${t.bg};` : '');
         // 🌟 核心：加载 _min 缩略图，加懒加载，加 pointer-events-none 防止吃点击事件
-        let imgHtml = t.type === 'image' ? `<img src="${t.url.replace('.jpg', '_min.jpg')}" loading="lazy" class="w-full h-full object-cover pointer-events-none">` : '';
+        let imgHtml = t.type === 'image' ? `<img src="${t.url.replace('.webp', '_min.webp')}" loading="lazy" decoding="async" class="w-full h-full object-cover pointer-events-none">` : '';
         const isActive = window._tempThemeId === t.id;
         return `
             <div id="theme-bg-${t.id}" onclick="setDiaryTheme('${t.id}')" class="relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all cursor-pointer active:scale-95 ${isActive ? 'border-blue-500 shadow-md' : 'border-transparent'}" style="${bgStyle}">
@@ -2791,21 +2838,40 @@ function setDiaryTextColor(colorId) {
     refreshThemePickerSelection();
 }
 
-// 🌟 点击日期：调起现有的日期引擎
+// 🌟 点击日期：限制未来，并联动天气
 function changeDiaryDate() {
     const dateEl = document.getElementById('diary-form-date');
     const currentDate = dateEl.dataset.date || formatDateLocal(new Date());
+    const todayStr = formatDateLocal(new Date());
     
     openDatePickerEngine(currentDate, {
-        maxDate: null, 
+        maxDate: todayStr, // 🌟 核心：限制不能选择今天之后的日期
         minYear: new Date().getFullYear() - 10, 
-        maxYear: new Date().getFullYear() + 10, 
-        onConfirm: (dStr) => {
+        maxYear: new Date().getFullYear(), // 最大年份就是今年
+        onConfirm: async (dStr) => {
             const parsed = parseDate(dStr);
             const weekStr = ['周日','周一','周二','周三','周四','周五','周六'][parsed.getDay()];
             dateEl.dataset.date = dStr;
             dateEl.textContent = `${parsed.getMonth() + 1}月${parsed.getDate()}日`;
             document.getElementById('diary-week-text').textContent = weekStr;
+
+            // 🌟 联动：如果日期改变，重新获取那天的天气
+            const weaEl = document.getElementById('diary-form-wea');
+            const locEl = document.getElementById('diary-form-loc');
+            if (weaEl) weaEl.innerText = '获取中...';
+            
+            const info = await fetchWeatherInfo(dStr);
+            if (locEl) { locEl.innerText = info.city; locEl.dataset.loc = info.city; }
+            if (weaEl) {
+                weaEl.innerText = info.weatherStr;
+                weaEl.dataset.wea = info.weatherStr;
+                weaEl.dataset.icon = info.weatherIcon;
+                const iconWrap = weaEl.previousElementSibling;
+                if (iconWrap) { 
+                    iconWrap.setAttribute('data-lucide', info.weatherIcon); 
+                    updateIcons(); 
+                }
+            }
         }
     });
 }
@@ -4825,15 +4891,15 @@ const DIARY_THEMES = [
     { id: 'gradient_purple', name: '暮光紫', type: 'gradient', bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', isDark: true },
     
     // 后面的 16 张图片，自动生成，不显示名字
-    ...Array.from({ length: 16 }, (_, i) => {
-        const num = String(i + 1).padStart(2, '0'); // 自动补零变成 01, 02...
-        return {
-            id: `bg_${num}`,
-            type: 'image',
-            url: `assets/bg/bg_${num}.jpg`,
-            isDark: true // 图片背景默认使用浅色字，可手动切黑字
-        };
-    })
+...Array.from({ length: 16 }, (_, i) => {
+    const num = String(i + 1).padStart(2, '0'); // 自动补零变成 01, 02...
+    return {
+        id: `bg_${num}`,
+        type: 'image',
+        url: `assets/bg/bg_${num}.webp`,
+        isDark: true // 图片背景默认使用浅色字，可手动切黑字
+    };
+})
 ];
 
 // 🌟 分类与支付方式的字典库
