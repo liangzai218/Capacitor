@@ -220,15 +220,14 @@ body.keyboard-open .fab-btn {
 /* 极简纯白悬浮卡片 */
 .center-modal-content { 
     background: #FFFFFF; 
+    /* 关键：弥散投影。用大范围低透明度的阴影营造悬浮感，而不是生硬的边框 */
     box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.18), 0 4px 16px -4px rgba(0, 0, 0, 0.08);
     width: 78%; max-width: 280px; 
-    border-radius: 24px; 
-    padding: 20px 16px 16px; 
+    border-radius: 24px; /* 加大圆角，更像现代 App */
+    padding: 20px 16px 16px; /* 顶部内边距稍微加大，留白更美 */
     transform: scale(0.9) translateY(20px); 
+    /* 使用苹果同款阻尼弹簧动画 */
     transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
-    /* 🌟 新增这两行 */
-    max-height: calc(100% - 40px); 
-    overflow-y: auto;
 }
 .center-modal-overlay.active .center-modal-content { 
     transform: scale(1) translateY(0); 
@@ -2578,23 +2577,45 @@ async function fetchWeatherInfo(targetDate) {
 
 function getDeviceName() {
     const ua = navigator.userAgent;
+    
+    // 🌟 1. 苹果设备拦截
     if (ua.includes('iPhone')) return 'iPhone';
     if (ua.includes('iPad')) return 'iPad';
     
     if (ua.includes('Android')) {
-        // 深度匹配 UA 中的型号（兼容更多格式）
-        // 常见的格式：Android 10; SM-G9730 Build/QP1A.190711.020
-        // 或者：Android 10; wv (这里 wv 代表 WebView，没有型号)
         const match = ua.match(/Android\s+([\d.]+);\s*([^;)]+?)(?:\s+Build|\))/i);
         if (match && match[2]) {
             let model = match[2].trim();
-            // 过滤掉那些没有意义的后缀，且排除 wv 这种 WebView 标识
+            
             if (!model.toLowerCase().includes('wv') && model.toLowerCase() !== 'k' && model.length > 1) {
-                // 如果型号里带有厂商代码（如 "MI 8"），直接返回
+                
+                // 🌟 2. 只要指定机型（iPhone 14/17 系列 + 一加 13）
+                const builtInModels = {
+                    // iPhone 14 系列 (iPhone15,x)
+                    'iPhone15,2': 'iPhone 14 Pro',
+                    'iPhone15,3': 'iPhone 14 Pro Max',
+                    'iPhone15,4': 'iPhone 14',
+                    'iPhone15,5': 'iPhone 14 Plus',
+                    
+                    // iPhone 17 系列 (iPhone18,x)
+                    'iPhone18,1': 'iPhone 17 Pro',
+                    'iPhone18,2': 'iPhone 17 Pro Max',
+                    'iPhone18,3': 'iPhone 17',
+                    'iPhone18,4': 'iPhone Air',
+                    
+                    // 一加 13 系列
+                    'PJZ110': '一加 13'
+                };
+
+                // 精准命中返回市场名
+                if (builtInModels[model]) {
+                    return builtInModels[model];
+                }
+
+                // 🌟 3. 都不在，直接返回原始代码
                 return model;
             }
         }
-        // 如果 UA 里被 App 强行阉割了（比如微信/QQ内置浏览器），只能显示 Android
         return 'Android';
     }
     return 'Web端';
@@ -9897,9 +9918,6 @@ let _initialVH = window.visualViewport ? window.visualViewport.height : window.i
 function showKeyboardUI() {
     document.body.classList.add('keyboard-open');
     
-    // 🌟 核心修复：如果当前有居中弹窗激活，不执行全局 scrollIntoView，防止整个弹窗被顶飞
-    if (document.querySelector('.center-modal-overlay.active')) return;
-
     if (currentTab === 'diary_edit' || currentTab === 'diary_detail') return;
 
     const t = document.activeElement;
@@ -9919,27 +9937,11 @@ if (window.visualViewport) {
         const currentVH = window.visualViewport.height;
         const keyboardHeight = _initialVH - currentVH;
 
-        // 获取当前激活的居中弹窗
-        const activeCenterModal = document.querySelector('.center-modal-overlay.active');
-
         if (keyboardHeight > 100) {
             showKeyboardUI();
-            
-            // 🌟 核心修复：键盘弹起时，让弹窗遮罩层高度缩到键盘上方，并在该区域内重新居中
-            if (activeCenterModal) {
-                activeCenterModal.style.height = `${currentVH}px`;
-                activeCenterModal.style.top = `${window.visualViewport.offsetTop}px`;
-                activeCenterModal.style.paddingBottom = '0';
-            }
         } else {
             hideKeyboardUI();
             _initialVH = currentVH;
-            
-            // 🌟 键盘收起时，恢复弹窗的默认全屏样式
-            if (activeCenterModal) {
-                activeCenterModal.style.height = '';
-                activeCenterModal.style.top = '';
-            }
         }
         
         // 每次视口变化，重绘日记页布局
